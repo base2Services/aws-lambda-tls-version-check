@@ -1,6 +1,6 @@
 # Lambda TLS version check
 
-Lambda function to return the tls version of a `host:port` endpoint
+Lambda function to check tls versions of a `host:port` endpoint
 
 Optionally, it can record metrics to CloudWatch.
 
@@ -12,6 +12,10 @@ will take priority over environment variables
 `HOSTNAME` - hostname to be checked
 
 `PORT` - http method to use, defaults to 443
+
+`CHECK_MAX_SUPPORTED` - run the check for the max supported version and returns the version as a int [`1 SSLv2`, `2 SSLv3`, `3 TLSv1`, `4 TLSv1.1`, `5 TLSv1.2`]
+
+`PROTOCOLS` - list of protocols to check, defaults to `['SSLv2','SSLv3','TLSv1','TLSv1.1','TLSv1.2']` returns 0 if not support and 1 if it is
 
 `REPORT_AS_CW_METRICS` - set to 1 if you wish to store reported data as CW
 custom metrics, 0 otherwise, defaults to 1

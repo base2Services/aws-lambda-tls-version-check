@@ -9,16 +9,20 @@ class Config:
 
     HOSTNAME = 'HOSTNAME'
     PORT = 'PORT'
+    CHECK_MAX_SUPPORTED = 'CHECK_MAX_SUPPORTED'
     REPORT_AS_CW_METRICS = 'REPORT_AS_CW_METRICS'
     CW_METRICS_NAMESPACE = 'CW_METRICS_NAMESPACE'
+    PROTOCOLS = 'PROTOCOLS'
 
     def __init__(self, event):
         self.event = event
         self.defaults = {
             self.HOSTNAME: 'example.com',
             self.PORT: 443,
+            self.CHECK_MAX_SUPPORTED: '1',
             self.REPORT_AS_CW_METRICS: '1',
             self.CW_METRICS_NAMESPACE: 'TLSVersionCheck',
+            self.PROTOCOLS: ['SSLv2','SSLv3','TLSv1','TLSv1.1','TLSv1.2']
         }
 
     def __get_property(self, property_name):
@@ -39,13 +43,12 @@ class Config:
         return self.__get_property(self.PORT)
 
     @property
-    def timeout(self):
-        return self.__get_property(self.TIMEOUT)
-
-    @property
-    def reportbody(self):
-        return self.__get_property(self.REPORT_RESPONSE_BODY)
-
+    def check_max(self):
+        return self.__get_property(self.CHECK_MAX_SUPPORTED)
+    
+    def protocols(self):
+        return self.__get_property(self.PROTOCOLS)
+        
     @property
     def cwoptions(self):
         return {
@@ -59,24 +62,74 @@ class TLSVerionCheck:
 
     def __init__(self, config):
         self.config = config
-
+    
     def execute(self):
-        context = ssl.create_default_context()
+        result = {}
+        
+        if self.config.check_max == '1':
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS)
+            result['MaxVersion'] = self.protocol_to_int(self.get_version(context))
+        
+        for protocol in self.config.protocols():
+            try:
+                prot = self.get_protocol(protocol)
+                context = ssl.SSLContext(prot)
+                version = self.get_version(context,protocol)
+                result[protocol] = 1 if version == protocol else 0
+            except ValueError as e:
+                print(f"Failed TLS connection to {self.config.hostname}:{self.config.port} with error: {e}")
+                result[protocol] = 0          
+        
+        return result
+        
+    def get_version(self, context, protocol=None):
         try:
             with socket.create_connection((self.config.hostname, self.config.port)) as sock:
                 with context.wrap_socket(sock, server_hostname=self.config.hostname) as ssock:
-                    version = ssock.version()
-
-            result = {
-                'TLSVersion': version.strip('TLSv')
-            }
-            print(f"TLS Version: {version}")
-            # return structure with data
-            return result
+                    return ssock.version()
+        except ssl.SSLError as e:
+            if e.reason == 'WRONG_VERSION_NUMBER':
+                print(f"{self.config.hostname}:{self.config.port} doesn't support TLS protocol {protocol}")
+            else:
+                print(f"Failed {protocol} TLS connection to {self.config.hostname}:{self.config.port} with error: {e}")
         except Exception as e:
-            print(f"Failed TLS connection to {self.config.hostname}:{self.config.port}\n{e}")
-            return {'Version': 0, 'Reason': str(e)}
-
+            print(f"Failed {protocol} TLS connection to {self.config.hostname}:{self.config.port} with error: {e}")
+        
+        return None
+            
+    def get_protocol(self,protocol):
+        
+        if protocol == 'SSLv2':
+            if ssl.HAS_SSLv2:
+                return ssl.PROTOCOL_SSLv2
+        elif protocol == 'SSLv3':
+            if ssl.HAS_SSLv3:
+                return ssl.PROTOCOL_SSLv3
+        elif protocol == 'TLSv1':
+            if ssl.HAS_TLSv1:
+                return ssl.PROTOCOL_TLSv1
+        elif protocol == 'TLSv1.1':
+            if ssl.HAS_TLSv1_1:
+                return ssl.PROTOCOL_TLSv1_1
+        elif protocol == 'TLSv1.2':
+            if ssl.HAS_TLSv1_2:
+                return ssl.PROTOCOL_TLSv1_2
+            
+        raise ValueError(f"Unknown or unsupported SSL/TLS protocol {protocol} by the client")
+    
+    def protocol_to_int(self, protocol):
+        if protocol == 'SSLv2':
+            return 1
+        elif protocol == 'SSLv3':
+            return 2
+        elif protocol == 'TLSv1':
+            return 3
+        elif protocol == 'TLSv1.1':
+            return 4
+        elif protocol == 'TLSv1.2':
+            return 5
+        else:
+            return 0
 
 class ResultReporter:
     """Reporting results to CloudWatch"""
@@ -89,14 +142,17 @@ class ResultReporter:
             try:
                 endpoint = f"{self.config.hostname}:{self.config.port}"
                 cloudwatch = boto3.client('cloudwatch')
-                metric_data = [{
-                    'MetricName': 'TLSVersion',
-                    'Dimensions': [
-                        {'Name': 'Endpoint', 'Value': endpoint}
-                    ],
-                    'Unit': 'None',
-                    'Value': float(result['TLSVersion'])
-                }]
+                metric_data = []
+                
+                for check, value in resuls.items():
+                    metric_data.append({
+                        'MetricName': check,
+                        'Dimensions': [
+                            {'Name': 'Endpoint', 'Value': endpoint}
+                        ],
+                        'Unit': 'None',
+                        'Value': int(value)
+                    })
 
                 result = cloudwatch.put_metric_data(
                     MetricData=metric_data,
