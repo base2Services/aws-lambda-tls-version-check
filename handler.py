@@ -144,7 +144,7 @@ class ResultReporter:
                 cloudwatch = boto3.client('cloudwatch')
                 metric_data = []
                 
-                for check, value in resuls.items():
+                for check, value in result.items():
                     metric_data.append({
                         'MetricName': check,
                         'Dimensions': [
@@ -154,12 +154,12 @@ class ResultReporter:
                         'Value': int(value)
                     })
 
-                result = cloudwatch.put_metric_data(
+                resp = cloudwatch.put_metric_data(
                     MetricData=metric_data,
                     Namespace=self.config.cwoptions['namespace']
                 )
                 
-                print(f"Sent data to CloudWatch requestId=:{result['ResponseMetadata']['RequestId']}")
+                print(f"Sent data to CloudWatch requestId=:{resp['ResponseMetadata']['RequestId']}")
             except Exception as e:
                 print(f"Failed to publish metrics to CloudWatch:{e}")
 
