@@ -27,7 +27,20 @@ their namespace, defaults to 'TcpPortCheck'
 
 By default, following properties will be rendered in output Json
 
-`TLSVersion` - the TLS version as a float 
+`MaxVersion` - tls version as an int 
+  - `1` => `SSLv2`
+  - `2` => `SSLv3`
+  - `3` => `TLSv1`
+  - `4` => `TLSv1.1`
+  - `5` => `TLSv1.2`
+
+Additionally each TLS version checked will have it's own metric pushed with a value of `0` meaning not supported and `1` meaning supported
+
+example
+
+```json
+{"MaxVersion":5,"SSLv2":0,"SSLv3":0,"TLSv1":1,"TLSv1.1":1,"TLSv1.2":1}
+```
 
 ## Dependencies
 
