@@ -9,7 +9,7 @@ Resources:
     Properties:
       FunctionName: tls-version-check
       Handler: handler.run_check
-      Runtime: python3.8
+      Runtime: python3.11
       Timeout: 300
       Policies:
         - Version: "2012-10-17"
